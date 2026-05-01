@@ -537,69 +537,58 @@
             frames.push(frameData)
         }
         fetch('badappleframes.txt')
-    .then(response => response.json())
-    .then(data => {
-        frames = data
-        // Save original for later restoration (frames 41+)
-        let originalFrames = JSON.parse(JSON.stringify(frames))
-        
-        // Helper: map sine (-1..1) to inner value given bottom and top ranges
-        function mapSine(sine, lowVal, highVal) {
-            // lowVal corresponds to sine=-1, highVal to sine=+1
-            return lowVal + (highVal - lowVal) * (sine + 1) / 2
-        }
-        
-        // Precompute sine values for frames 1..40 (index 1..40 in array)
-        // Use t = (frame-1)/39, sine = sin(2*pi*t - pi/2)
-        let sineValues = []
-        for (let f=1; f<=40; f++) {
-            let t = (f-1) / 39
-            let sine = Math.sin(2 * Math.PI * t - Math.PI/2)
-            sineValues[f] = sine
-        }
-        
-        // Frames 1..20: both innerTop and innerBottom follow sine
-        for (let f=1; f<=20; f++) {
-            let sine = sineValues[f]
-            let innerTop = mapSine(sine, 50, 30)   // -1->50, +1->30
-            let innerBottom = mapSine(sine, 70, 50) // -1->70, +1->50
-            let newFrame = []
-            for (let i=0; i<64; i++) {
-                if (i === 32) {
-                    newFrame.push([0, 100, innerTop, innerBottom, 1])
-                } else {
-                    newFrame.push([0, 100, 0, 100, 0])
+            .then(response => response.json())
+            .then(data => {
+                frames = data
+                let originalFrames = JSON.parse(JSON.stringify(frames))
+                
+                function mapSine(sine, lowVal, highVal) {
+                    return lowVal+(highVal-lowVal)*(sine+1)/2
                 }
-            }
-            frames[f] = newFrame
-        }
-        
-        // Frames 21..40: innerTop follows sine, innerBottom locked at 50
-        for (let f=21; f<=40; f++) {
-            let sine = sineValues[f]
-            let innerTop = mapSine(sine, 50, 30)   // goes from 30 at f=20 down to 50 at f=40
-            let innerBottom = 50
-            let newFrame = []
-            for (let i=0; i<64; i++) {
-                if (i === 32) {
-                    newFrame.push([0, 100, innerTop, innerBottom, 1])
-                } else {
-                    newFrame.push([0, 100, 0, 100, 0])
+                
+                let sineValues = []
+                for (let f=1; f<=40; f++) {
+                    let t = (f-1)/39
+                    let sine = Math.sin(2*Math.PI*t-Math.PI/2)
+                    sineValues[f] = sine
                 }
-            }
-            frames[f] = newFrame
-        }
-        
-        // Frame 0 untouched (original data)
-        // Frames 41+ untouched (original data already in frames)
-        
-        videoTick = 0
-        videoPlaying = true
-        videoPaused = false
-        frameAccumulator = 0
-        console.log('Loaded', frames.length, 'frames with custom animation on bar 32 (frames 1-40)')
-    })
-    .catch(err => console.error('Failed to load:', err))
+                
+                for (let f=1; f<=20; f++) {
+                    let sine = sineValues[f]
+                    let innerTop = mapSine(sine, 50, 30)
+                    let innerBottom = mapSine(sine, 70, 50)
+                    let newFrame = []
+                    for (let i=0; i<64; i++) {
+                        if (i === 32) {
+                            newFrame.push([0, 100, innerTop, innerBottom, 1])
+                        } else {
+                            newFrame.push([0, 100, 0, 100, 0])
+                        }
+                    }
+                    frames[f] = newFrame
+                }
+                
+                for (let f=21; f<=40; f++) {
+                    let sine = sineValues[f]
+                    let innerTop = mapSine(sine, 50, 30)
+                    let innerBottom = 50
+                    let newFrame = []
+                    for (let i=0; i<64; i++) {
+                        if (i === 32) {
+                            newFrame.push([0, 100, innerTop, innerBottom, 1])
+                        } else {
+                            newFrame.push([0, 100, 0, 100, 0])
+                        }
+                    }
+                    frames[f] = newFrame
+                }
+                
+                videoTick = 0
+                videoPlaying = true
+                videoPaused = false
+                frameAccumulator = 0
+            })
+            .catch(err => console.error('Failed to load:', err))
 
         fov = 360
         let fps = 0
@@ -617,6 +606,9 @@
         upKeyWasPressed = false
         downKeyWasPressed = false
         videoShowInfo = true
+        let selectedBar = -1
+        let dragOffset = 0
+        let barHeightPercent = 0
 
         let audio = new Audio('badapple.mp3')
         audio.preload = 'auto'
@@ -646,7 +638,7 @@
 
             function applyFrame() {
                 if (videoTick >= 0 && videoTick < frames.length) {
-                    scrollY = frames[videoTick]
+                    scrollY = JSON.parse(JSON.stringify(frames[videoTick]))
                 }
             }
 
@@ -791,14 +783,95 @@
                 input.click()
             }
 
-            // render shit
             scale = Math.max(canvas.width/(fov*16/9), canvas.height/fov)
+            screenSizeX = (canvas.width/scale)
+            screenSizeY = (canvas.height/scale)
+
+            // scroll bar dragging
+            worldMouseX = mouseX/scale
+            worldMouseY = mouseY/scale
+
+            let hoveredBar = -1
+
+            let scrollSizeX = (screenSizeX-2)/scrollY.length-2
+            let scrollSizeY = screenSizeY-4
+            let scrollPosY = -screenSizeY/2+2
+
+            for (let i = 0; i < scrollY.length; i++) {
+                let scrollPosX = -screenSizeX/2+2+i*(scrollSizeX+2)
+
+                let outerTop = scrollY[i][0]
+                let outerBottom = scrollY[i][1]
+                let innerTop = scrollY[i][2]
+                let innerBottom = scrollY[i][3]
+
+                let outerSizeY = ((outerBottom-outerTop)/100)*scrollSizeY
+                let innerSizeY = ((innerBottom-innerTop)/100)*outerSizeY
+                let innerPosY = scrollPosY+(outerTop/100)*scrollSizeY+(innerTop/100)*outerSizeY+innerSizeY/2
+
+                if (worldMouseX >= scrollPosX && worldMouseX <= scrollPosX+scrollSizeX && worldMouseY >= innerPosY-innerSizeY/2 && worldMouseY <= innerPosY+innerSizeY/2) {
+                    hoveredBar = i
+                    break
+                }
+            }
+
+            if (leftMouseDown && hoveredBar != -1 && selectedBar == -1) {
+                selectedBar = hoveredBar
+                let i = selectedBar
+
+                let scrollPosX = -screenSizeX/2+2+i*(scrollSizeX+2)
+
+                let outerTop = scrollY[i][0]
+                let outerBottom = scrollY[i][1]
+                let innerTop = scrollY[i][2]
+                let innerBottom = scrollY[i][3]
+
+                let outerSizeY = ((outerBottom-outerTop)/100)*scrollSizeY
+                let innerSizeY = ((innerBottom-innerTop)/100)*outerSizeY
+                let innerPosY = scrollPosY+(outerTop/100)*scrollSizeY+(innerTop/100)*outerSizeY+innerSizeY/2
+
+                dragOffset = innerPosY-worldMouseY
+                barHeightPercent = innerBottom-innerTop
+            }
+
+            if (!leftMouseDown && selectedBar != -1) {
+                selectedBar = -1
+            }
+
+            if (leftMouseDown && selectedBar != -1) {
+                let i = selectedBar
+
+                let scrollPosX = -screenSizeX/2+2+i*(scrollSizeX+2)
+
+                let outerTop = scrollY[i][0]
+                let outerBottom = scrollY[i][1]
+
+                let outerSizeY = ((outerBottom-outerTop)/100)*scrollSizeY
+                let outerTopY = scrollPosY+(outerTop/100)*scrollSizeY
+                let outerBottomY = scrollPosY+(outerBottom/100)*scrollSizeY
+
+                let newInnerCenterY = worldMouseY+dragOffset
+                let minCenterY = outerTopY+(barHeightPercent/100)*outerSizeY/2
+                let maxCenterY = outerBottomY-(barHeightPercent/100)*outerSizeY/2
+
+                newInnerCenterY = Math.max(minCenterY, Math.min(maxCenterY, newInnerCenterY))
+
+                let innerCenterPercent = ((newInnerCenterY-outerTopY)/outerSizeY)*100
+                let newInnerTopPercent = innerCenterPercent-barHeightPercent/2
+                let newInnerBottomPercent = innerCenterPercent+barHeightPercent/2
+
+                newInnerTopPercent = Math.max(0, Math.min(100, newInnerTopPercent))
+                newInnerBottomPercent = Math.max(0, Math.min(100, newInnerBottomPercent))
+
+                scrollY[i][2] = newInnerTopPercent
+                scrollY[i][3] = newInnerBottomPercent
+            }
+
+            // render shit
             ctx.clearRect(0, 0, canvas.width, canvas.height)
             ctx.save()
             ctx.translate(canvas.width/2, canvas.height/2)
             ctx.scale(scale, scale)
-            screenSizeX = (canvas.width/scale)
-            screenSizeY = (canvas.height/scale)
 
             for (let i=0; i<scrollY.length; i++) {
                 let scrollSizeX = (screenSizeX-2)/scrollY.length-2
@@ -826,7 +899,7 @@
             }
 
             if (videoShowInfo) {
-                drawText(-screenSizeX/2+2*(fov/360), screenSizeY/2-8*(fov/360), 12*(fov/360), '#ff0000', `${videoPaused ? `paused` : `playing`} Frame ${videoTick}/${frames.length} (${((videoTick/frames.length)*100).toFixed(1)}%) | ${videoSpeeds[videoSpeedIndex]}fps (${(videoSpeeds[videoSpeedIndex]/30).toFixed(1)}x)${muteAudio ? `muted` : ``}`, 0, 'left')
+                drawText(-screenSizeX/2+2*(fov/360), screenSizeY/2-8*(fov/360), 12*(fov/360), '#ff0000', `${videoPaused ? `paused` : `playing`} | frame ${videoTick}/${frames.length} (${((videoTick/frames.length)*100).toFixed(1)}%) | ${videoSpeeds[videoSpeedIndex]}fps (${(videoSpeeds[videoSpeedIndex]/30).toFixed(1)}x)${muteAudio ? ` | muted` : ``}`, 0, 'left')
             }
 
             ctx.restore()
