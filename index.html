@@ -522,16 +522,14 @@
         scrollY = []
         frame = 0
         frames = []
-        for (let f=0; f < 300; f++) {
+        for (let f=0; f < 6534; f++) {
             let frameData = []
             for (let i=0; i < 64; i++) {
-                let outerTop = 0
-                let outerBottom = 100
-                let innerCenter = 50+Math.sin(f/20+i/10)*40
-                let innerThickness = 20
-                let innerTop = Math.max(0, innerCenter-innerThickness/2)
-                let innerBottom = Math.min(100, innerCenter+innerThickness/2)
-                let inverted = i < 32 ? 1 : 0
+                let outerTop = 49
+                let outerBottom = 52
+                let innerTop = 0
+                let innerBottom = 100
+                let inverted = 0
                 frameData.push([outerTop, outerBottom, innerTop, innerBottom, inverted])
             }
             frames.push(frameData)
@@ -609,6 +607,8 @@
         let selectedBar = -1
         let dragOffset = 0
         let barHeightPercent = 0
+        let rightClickHandled = false
+        let resizeCooldown = false
 
         let audio = new Audio('badapple.mp3')
         audio.preload = 'auto'
@@ -791,27 +791,30 @@
             worldMouseX = mouseX/scale
             worldMouseY = mouseY/scale
 
-            let hoveredBar = -1
-
             let scrollSizeX = (screenSizeX-2)/scrollY.length-2
             let scrollSizeY = screenSizeY-4
             let scrollPosY = -screenSizeY/2+2
 
+            let hoveredBar = -1
+            let hoveredBarXOnly = -1
             for (let i = 0; i < scrollY.length; i++) {
                 let scrollPosX = -screenSizeX/2+2+i*(scrollSizeX+2)
-
                 let outerTop = scrollY[i][0]
                 let outerBottom = scrollY[i][1]
                 let innerTop = scrollY[i][2]
                 let innerBottom = scrollY[i][3]
-
                 let outerSizeY = ((outerBottom-outerTop)/100)*scrollSizeY
                 let innerSizeY = ((innerBottom-innerTop)/100)*outerSizeY
                 let innerPosY = scrollPosY+(outerTop/100)*scrollSizeY+(innerTop/100)*outerSizeY+innerSizeY/2
 
-                if (worldMouseX >= scrollPosX && worldMouseX <= scrollPosX+scrollSizeX && worldMouseY >= innerPosY-innerSizeY/2 && worldMouseY <= innerPosY+innerSizeY/2) {
-                    hoveredBar = i
-                    break
+                // check x only (any y)
+                if (worldMouseX >= scrollPosX && worldMouseX <= scrollPosX+scrollSizeX) {
+                    hoveredBarXOnly = i
+                    // continue to check if also y inside thumb
+                    if (worldMouseY >= innerPosY-innerSizeY/2 && worldMouseY <= innerPosY+innerSizeY/2) {
+                        hoveredBar = i
+                        break  // full match found, stop searching
+                    }
                 }
             }
 
@@ -867,6 +870,46 @@
                 scrollY[i][3] = newInnerBottomPercent
             }
 
+            // right click to invert bar color
+            if (rightMouseDown && !rightClickHandled && hoveredBarXOnly != -1) {
+                let i = hoveredBarXOnly
+                scrollY[i][4] = 1 - scrollY[i][4]
+                rightClickHandled = true
+            }
+            if (!rightMouseDown && rightClickHandled) {
+                rightClickHandled = false
+            }
+
+            // scroll up/down to resize bar (expand/shrink from center)
+            if ((isScrollingUp || isScrollingDown) && !resizeCooldown && hoveredBarXOnly != -1) {
+                let i = hoveredBarXOnly
+                let innerTop = scrollY[i][2]
+                let innerBottom = scrollY[i][3]
+                let step = 2
+                if (isKeyPressed('control')) step = 8
+                else if (isKeyPressed('shift')) step = 0.25
+                if (isScrollingUp) {
+                    innerTop = Math.max(0, innerTop - step)
+                    innerBottom = Math.min(100, innerBottom + step)
+                } else if (isScrollingDown) {
+                    innerTop = Math.min(innerBottom, innerTop + step)
+                    innerBottom = Math.max(innerTop, innerBottom - step)
+                }
+                // Clamp to [0,100]
+                innerTop = Math.max(0, Math.min(100, innerTop))
+                innerBottom = Math.max(0, Math.min(100, innerBottom))
+                // If they cross, set both to the average (zero height)
+                if (innerTop > innerBottom) {
+                    let mid = (innerTop + innerBottom)/2
+                    innerTop = mid
+                    innerBottom = mid
+                }
+                scrollY[i][2] = innerTop
+                scrollY[i][3] = innerBottom
+                resizeCooldown = true
+                setTimeout(() => { resizeCooldown = false }, 50)
+            }
+            
             // render shit
             ctx.clearRect(0, 0, canvas.width, canvas.height)
             ctx.save()
@@ -896,6 +939,7 @@
                 
                 drawRect(scrollPosX+scrollSizeX/2, outerPosY, scrollSizeX, outerSizeY, 0, scrollColor, '', 0)
                 drawRect(scrollPosX+scrollSizeX/2, innerPosY, scrollSizeX, innerSizeY, 0, barColor, '', 0)
+                drawText(scrollPosX+scrollSizeX/2, innerPosY, 6, inverted == 1 ? '#000000' : '#ffffff', `${inverted}`, 0, 'center', 'center')
             }
 
             if (videoShowInfo) {

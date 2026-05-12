@@ -1,5 +1,6 @@
 # Bad Apple but it's 64 scroll bars
 yes, *scroll bars*. You can pause the video anytime and actually scroll these bars yourself!  
+https://spin4team4096.github.io/64scrollbars/  
 
 # Controls:
 **K**/**space** - play/pause video  
@@ -10,6 +11,10 @@ yes, *scroll bars*. You can pause the video anytime and actually scroll these ba
 **V** - toggle info display  
 **↑** / **↓** arrow keys - increase/decrease playback speed (only works when muted bc vsync and i cba to change that)  
 **]** - load animation from a .txt (you need a valid format)  
+
+**Mouse Drag** to scroll bars
+**Right Click** to invert color
+**Scroll** to change bar size (hold shift/ctrl to change precision)
 
 # How it works
 i'm gonna post a video on this soon! 
