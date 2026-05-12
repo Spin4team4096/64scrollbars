@@ -939,7 +939,7 @@
                 
                 drawRect(scrollPosX+scrollSizeX/2, outerPosY, scrollSizeX, outerSizeY, 0, scrollColor, '', 0)
                 drawRect(scrollPosX+scrollSizeX/2, innerPosY, scrollSizeX, innerSizeY, 0, barColor, '', 0)
-                drawText(scrollPosX+scrollSizeX/2, innerPosY, 6, inverted == 1 ? '#000000' : '#ffffff', `${inverted}`, 0, 'center', 'center')
+                if (Math.abs(outerBottom - outerTop) < 10) drawText(scrollPosX+scrollSizeX/2, innerPosY, 6, inverted == 1 ? '#000000' : '#ffffff', `${inverted}`, 0, 'center', 'center') // add if statement to only do if the difference between outerTop and outerBottom is less than 10%   
             }
 
             if (videoShowInfo) {
